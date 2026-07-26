@@ -6,7 +6,7 @@ from pathlib import Path
 from renaimedia.config import Config
 
 KNOWN_PATTERN = re.compile(
-    r"^(?P<title>.+?)\s*[-._]\s*[Ss](?P<season>\d+)",
+    r"^(?P<title>.+)[-._ ]+[Ss](?P<season>\d{1,2})$",
     re.IGNORECASE,
 )
 
@@ -37,9 +37,11 @@ def is_media_file(filepath: Path) -> bool:
     return filepath.suffix.lower() in MEDIA_EXTENSIONS
 
 
-def is_already_organized(folder: Path) -> bool:
+def is_already_organized(folder: Path, output_root: Path | None = None) -> bool:
     match = KNOWN_PATTERN.search(folder.name)
     if not match:
+        return False
+    if output_root is not None and not folder.resolve().is_relative_to(output_root.resolve()):
         return False
     has_media = any(
         is_media_file(f) for f in folder.iterdir() if f.is_file() and not f.name.startswith(".")

@@ -134,7 +134,7 @@ def _process_subfolders(
     subfolders: list[Path], config: Config, dry_run: bool, interactive: bool
 ) -> None:
     for folder in subfolders:
-        if is_already_organized(folder):
+        if is_already_organized(folder, config.output_folder):
             print(f"  [SKIP] Already organized: {folder.name}")
             continue
 
