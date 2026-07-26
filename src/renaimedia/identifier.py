@@ -13,23 +13,29 @@ You are a media identification expert. Given a folder name and its contents
 (filenames), identify whether it contains a TV show or a movie.
 Return ONLY valid JSON with no other text.
 
-For TV shows, provide:
-- type: "show"
-- title: The show name (standardized, e.g. "The Wire", "Breaking Bad")
-- season: The season number as an integer
+Include a confidence field (0-100 integer) for each identification:
+- 80-100: Unique show/movie, well-known, no ambiguity (high confidence)
+- 50-79:  Reasonable match but some uncertainty (medium confidence)
+- 0-49:   Ambiguous (multiple shows share the name), or very obscure
 
-For movies, provide:
-- type: "movie"
-- title: The movie name (standardized)
-- year: The release year as an integer (if discernible, otherwise null)
+Note: show titles may be in Spanish, English, or other languages.
+Return the standardized international title (usually English), but
+use the original language title if that's the primary known name.
 
-If you cannot determine the content, return:
-{"type": "unknown", "title": null, "season": null, "year": null}
+For TV shows, return:
+{"type": "show", "title": "<name>", "season": <int>, "confidence": <int>}
 
-Examples of expected output:
-{"type": "show", "title": "The Wire", "season": 1}
-{"type": "movie", "title": "Inception", "year": 2010}
-{"type": "show", "title": "Game of Thrones", "season": 3}"""
+For movies, return:
+{"type": "movie", "title": "<name>", "year": <int_or_null>, "confidence": <int>}
+
+If you cannot determine the content:
+{"type": "unknown", "title": null, "season": null, "year": null, "confidence": 0}
+
+Examples:
+{"type": "show", "title": "The Wire", "season": 1, "confidence": 95}
+{"type": "movie", "title": "Inception", "year": 2010, "confidence": 90}
+{"type": "show", "title": "La Casa de Papel", "season": 3, "confidence": 85}
+{"type": "show", "title": "Money Heist", "season": 3, "confidence": 85}"""
 
 
 def identify_folder(folder_path: Path, config: Config) -> dict[str, Any]:

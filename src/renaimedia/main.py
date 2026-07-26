@@ -18,6 +18,7 @@ def _prompt_review(
     title: str,
     season: int | None,
     year: int | None,
+    confidence: int,
 ) -> dict[str, str | int | None] | None:
     while True:
         print()
@@ -30,6 +31,7 @@ def _prompt_review(
             print("  Type   : Movie")
             print(f"  Title  : {title}")
             print(f"  Year   : {year if year is not None else '?'}")
+        print(f"  Confidence: {confidence}%")
         print("  [y] accept  [e] edit  [s] skip  [q] quit")
         choice = input("  > ").strip().lower()
 
@@ -63,6 +65,7 @@ def _prompt_review(
                 print(f"  Unknown type: {new_type}")
             media_type = new_type
             title = new_title
+            confidence = 100
         else:
             print("  Invalid choice. Use y/e/s/q")
 
@@ -91,7 +94,15 @@ def main() -> None:
         "-i",
         "--interactive",
         action="store_true",
-        help="Prompt to approve or edit each identified title before moving",
+        help="Prompt to approve every identification regardless of confidence",
+    )
+    parser.add_argument(
+        "--confidence",
+        type=int,
+        default=70,
+        metavar="N",
+        help="Auto-accept threshold in %% (0-100, default: 70). "
+        "Lower-confidence matches will prompt for review.",
     )
     args = parser.parse_args()
 
@@ -121,19 +132,22 @@ def main() -> None:
     print(f"Subfolders: {len(subs)}, Files at root: {len(files_at_root)}")
     if args.dry_run:
         print("[DRY RUN - no changes will be made]")
-    if args.interactive:
-        print("[INTERACTIVE - approve each identification]")
+    print(f"Confidence threshold: {args.confidence}%")
     print()
 
     if subs:
-        _process_subfolders(subs, config, args.dry_run, args.interactive)
+        _process_subfolders(subs, config, args.dry_run, args.interactive, args.confidence)
 
     if files_at_root:
-        _process_flat(source, config, args.dry_run, args.interactive)
+        _process_flat(source, config, args.dry_run, args.interactive, args.confidence)
 
 
 def _process_subfolders(
-    subfolders: list[Path], config: Config, dry_run: bool, interactive: bool
+    subfolders: list[Path],
+    config: Config,
+    dry_run: bool,
+    interactive: bool,
+    confidence_threshold: int,
 ) -> None:
     for folder in subfolders:
         subfiles = [f for f in folder.iterdir() if f.is_file() and not f.name.startswith(".")]
@@ -141,14 +155,20 @@ def _process_subfolders(
             grandkids = [f for f in folder.iterdir() if f.is_dir() and not f.name.startswith(".")]
             if grandkids:
                 print(f"  [DRILL] Recursing into: {folder.name}")
-                _process_subfolders(grandkids, config, dry_run, interactive)
+                _process_subfolders(grandkids, config, dry_run, interactive, confidence_threshold)
             continue
 
         result = identify_folder(folder, config)
-        _handle_result(folder, result, subfiles, config, dry_run, interactive)
+        _handle_result(folder, result, subfiles, config, dry_run, interactive, confidence_threshold)
 
 
-def _process_flat(folder: Path, config: Config, dry_run: bool, interactive: bool) -> None:
+def _process_flat(
+    folder: Path,
+    config: Config,
+    dry_run: bool,
+    interactive: bool,
+    confidence_threshold: int,
+) -> None:
     results = identify_flat_folder(folder, config)
     if not results:
         print(f"  [SKIP] Could not identify content in: {folder.name}")
@@ -164,7 +184,7 @@ def _process_flat(folder: Path, config: Config, dry_run: bool, interactive: bool
             and (not matched_files or f.name in matched_files)
         ]
         source = Path(result.get("_source", str(folder)))
-        _handle_result(source, result, files, config, dry_run, interactive)
+        _handle_result(source, result, files, config, dry_run, interactive, confidence_threshold)
 
 
 def _handle_result(
@@ -174,11 +194,13 @@ def _handle_result(
     config: Config,
     dry_run: bool,
     interactive: bool,
+    confidence_threshold: int,
 ) -> None:
     media_type = str(result.get("type", "unknown"))
     title = str(result.get("title", ""))
     season = result.get("season")
     year = result.get("year")
+    confidence = _get_confidence(result)
 
     if media_type == "unknown" or not title:
         print(f"  [SKIP] Could not identify: {source.name}")
@@ -189,13 +211,15 @@ def _handle_result(
         print(f"  [SKIP] No media files in: {source.name}")
         return
 
-    if interactive:
+    needs_review = interactive or confidence < confidence_threshold
+    if needs_review:
         result_override = _prompt_review(
             source.name,
             media_type,
             title,
             int(season) if isinstance(season, int) else None,
             int(year) if isinstance(year, int) else None,
+            confidence,
         )
         if result_override is None:
             print(f"  [SKIP] User skipped: {source.name}")
@@ -222,7 +246,8 @@ def _handle_result(
         return
 
     print(
-        f"  [{'DRY' if dry_run else 'MOVE'}] {desc} <- {len(media_files)} files from {source.name}"
+        f"  [{confidence}%] [{'DRY' if dry_run else 'MOVE'}] {desc}"
+        f" <- {len(media_files)} files from {source.name}"
     )
     print(f"  -> {target}/")
 
@@ -236,3 +261,10 @@ def _handle_result(
             config,
             media_type,
         )
+
+
+def _get_confidence(result: dict[str, str | int | list[str] | None]) -> int:
+    raw = result.get("confidence")
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    return 0
