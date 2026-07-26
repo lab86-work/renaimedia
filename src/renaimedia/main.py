@@ -21,13 +21,15 @@ def _prompt_review(
 ) -> dict[str, str | int | None] | None:
     while True:
         print()
-        print(f"  Source: {source_name}")
-        print(f"  Identified as: [{media_type}] {title}", end="")
-        if season is not None:
-            print(f" - Season {season}", end="")
-        if year is not None:
-            print(f" ({year})", end="")
-        print()
+        print(f"  Source folder: {source_name}")
+        if media_type == "show":
+            print("  Type   : TV Show")
+            print(f"  Title  : {title}")
+            print(f"  Season : {season if season is not None else '?'}")
+        else:
+            print("  Type   : Movie")
+            print(f"  Title  : {title}")
+            print(f"  Year   : {year if year is not None else '?'}")
         print("  [y] accept  [e] edit  [s] skip  [q] quit")
         choice = input("  > ").strip().lower()
 
@@ -39,26 +41,26 @@ def _prompt_review(
             print("Quitting.")
             sys.exit(0)
         if choice == "e":
-            new_type = input(f"  Type [show/movie] ({media_type}): ").strip() or media_type
-            new_title = input(f"  Title ({title}): ").strip() or title
+            new_type = input(f"  Type (show/movie) [{media_type}]: ").strip() or media_type
+            new_title = input(f"  Title [{title}]: ").strip() or title
             if new_type == "show":
-                raw_season = input(f"  Season ({season}): ").strip()
+                raw_season = input(f"  Season [{season}]: ").strip()
                 if raw_season:
                     try:
                         season = int(raw_season)
                     except ValueError:
-                        print(f"  Invalid season number: {raw_season}, keeping {season}")
+                        print(f"  Invalid season: {raw_season}")
                 year = None
             elif new_type == "movie":
-                raw_year = input(f"  Year ({year}): ").strip()
+                raw_year = input(f"  Year [{year}]: ").strip()
                 if raw_year:
                     try:
                         year = int(raw_year)
                     except ValueError:
-                        print(f"  Invalid year: {raw_year}, keeping {year}")
+                        print(f"  Invalid year: {raw_year}")
                 season = None
             else:
-                print(f"  Unknown type: {new_type}, keeping as-is")
+                print(f"  Unknown type: {new_type}")
             media_type = new_type
             title = new_title
         else:
