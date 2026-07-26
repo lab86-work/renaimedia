@@ -7,7 +7,7 @@ from typing import Any
 
 from renaimedia.cache import set_cached
 from renaimedia.config import Config
-from renaimedia.identifier import identify_flat_folder, identify_folder
+from renaimedia.identifier import identify_flat_folder, identify_folder, list_models
 from renaimedia.local_parse import local_identify
 from renaimedia.organizer import is_media_file, organize, safe_name
 
@@ -236,7 +236,23 @@ def main() -> None:
         metavar="PROVIDER/MODEL",
         help="OpenRouter model to use (overrides OPENROUTER_MODEL env var)",
     )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List available OpenRouter models and exit",
+    )
     args = parser.parse_args()
+
+    if args.list_models:
+        try:
+            config = Config.from_env()
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        print("Available OpenRouter models:")
+        for m in list_models(config):
+            print(m)
+        sys.exit(0)
 
     source: Path = args.source.resolve()
     if not source.exists():

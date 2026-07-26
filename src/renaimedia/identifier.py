@@ -195,10 +195,35 @@ def _call_openrouter(user_prompt: str, config: Config) -> tuple[str, float]:
             headers=headers,
             json=payload,
         )
-        response.raise_for_status()
+        if not response.is_success:
+            body = response.text[:500]
+            raise RuntimeError(f"HTTP {response.status_code}: {body[:200]}")
         elapsed = time.monotonic() - start
         content: str = response.json()["choices"][0]["message"]["content"]
         return content, elapsed
+
+
+def list_models(config: Config) -> list[str]:
+    headers = {
+        "Authorization": f"Bearer {config.openrouter_api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=config.request_timeout) as client:
+            response = client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+            models = []
+            for m in data.get("data", []):
+                mid = m.get("id", "")
+                name = m.get("name", mid)
+                models.append(f"  {mid}  ({name})")
+            return sorted(models)
+    except Exception as e:
+        return [f"  Error fetching models: {e}"]
 
 
 def _parse_response(content: str) -> dict[str, Any]:
