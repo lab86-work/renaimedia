@@ -9,7 +9,7 @@ from renaimedia.identifier import (
     identify_flat_folder,
     identify_folder,
 )
-from renaimedia.organizer import is_already_organized, is_media_file, organize
+from renaimedia.organizer import is_media_file, organize
 
 
 def _prompt_review(
@@ -134,10 +134,6 @@ def _process_subfolders(
     subfolders: list[Path], config: Config, dry_run: bool, interactive: bool
 ) -> None:
     for folder in subfolders:
-        if is_already_organized(folder, config.output_folder):
-            print(f"  [SKIP] Already organized: {folder.name}")
-            continue
-
         subfiles = [f for f in folder.iterdir() if f.is_file() and not f.name.startswith(".")]
         if not subfiles:
             grandkids = [f for f in folder.iterdir() if f.is_dir() and not f.name.startswith(".")]
@@ -217,6 +213,11 @@ def _handle_result(
     else:
         target = config.output_folder / title
         desc = title
+
+    all_there = all((target / f.name).exists() for f in media_files)
+    if target.exists() and all_there:
+        print(f"  [SKIP] Already organized: {desc}")
+        return
 
     print(
         f"  [{'DRY' if dry_run else 'MOVE'}] {desc} <- {len(media_files)} files from {source.name}"
