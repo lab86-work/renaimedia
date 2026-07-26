@@ -63,10 +63,14 @@ def identify_folder(folder_path: Path, config: Config, use_cache: bool = True) -
     user_prompt = f"Folder: {folder_name}\nParent: {parent_name}\nContents:\n{content_str}"
 
     print(f"  AI: identifying {folder_name}...", end="", flush=True)
-    response_text, elapsed = _call_openrouter(user_prompt, config)
-    print(f" done ({elapsed:.1f}s)")
+    try:
+        response_text, elapsed = _call_openrouter(user_prompt, config)
+        print(f" done ({elapsed:.1f}s)")
+        result = _parse_response(response_text)
+    except Exception as e:
+        print(f" error: {e}")
+        return {"type": "unknown", "title": None, "season": None, "year": None}
 
-    result = _parse_response(response_text)
     if use_cache:
         set_cached(folder_path, result)
     return result
@@ -112,8 +116,12 @@ def identify_flat_folder(
     )
 
     print(f"  AI: identifying {folder_name}...", end="", flush=True)
-    content, elapsed = _call_openrouter(user_prompt, config)
-    print(f" done ({elapsed:.1f}s)")
+    try:
+        content, elapsed = _call_openrouter(user_prompt, config)
+        print(f" done ({elapsed:.1f}s)")
+    except Exception as e:
+        print(f" error: {e}")
+        return []
 
     try:
         parsed = _parse_response(content)
@@ -142,21 +150,24 @@ def identify_flat_folder(
                 f"Remaining files (may be another show/movie):\n"
                 + "\n".join(f.name for f in remaining[:50])
             )
-            remaining_content, remaining_elapsed = _call_openrouter(remaining_prompt, config)
-            print(f"  AI: second pass... done ({remaining_elapsed:.1f}s)")
-            remaining_parsed = _parse_response(remaining_content)
-            if isinstance(remaining_parsed, list):
-                for item in remaining_parsed:
-                    item["_source"] = str(folder_path)
-                    results.append(item)
-            elif remaining_parsed.get("type") != "unknown":
-                remaining_parsed["_source"] = str(folder_path)
-                results.append(remaining_parsed)
+            try:
+                remaining_content, remaining_elapsed = _call_openrouter(remaining_prompt, config)
+                print(f"  AI: second pass... done ({remaining_elapsed:.1f}s)")
+                remaining_parsed = _parse_response(remaining_content)
+                if isinstance(remaining_parsed, list):
+                    for item in remaining_parsed:
+                        item["_source"] = str(folder_path)
+                        results.append(item)
+                elif remaining_parsed.get("type") != "unknown":
+                    remaining_parsed["_source"] = str(folder_path)
+                    results.append(remaining_parsed)
+            except Exception as e:
+                print(f"  AI: second pass error: {e}")
 
         if use_cache:
             set_cached(folder_path, {"_results": results, "_cached": True})
         return results
-    except ValueError, json.JSONDecodeError:
+    except Exception:
         return []
 
 

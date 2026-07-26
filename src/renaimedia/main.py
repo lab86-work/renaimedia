@@ -342,40 +342,48 @@ def _process_subfolders(
 
         ai_result = identify_folder(folder, config, use_cache)
         ai_result["_source"] = str(folder)
+        ai_ok = ai_result.get("type") != "unknown" and ai_result.get("title")
 
         if local_result and (interactive or _get_confidence(local_result) < confidence_threshold):
-            tl = _target_path(
-                config,
-                str(local_result.get("type", "show")),
-                str(local_result.get("title", "")),
-                int(local_result["season"]) if local_result.get("season") is not None else None,
-                int(local_result["year"]) if local_result.get("year") is not None else None,
-            )
-            ta = _target_path(
-                config,
-                str(ai_result.get("type", "unknown")),
-                str(ai_result.get("title", "")),
-                int(ai_result["season"]) if ai_result.get("season") is not None else None,
-                int(ai_result["year"]) if ai_result.get("year") is not None else None,
-            )
-            override = _prompt_multi(
-                folder, local_result, ai_result, tl, ta, len(media_files), config
-            )
-            if override is None:
-                print(f"  [SKIP] User skipped: {folder}")
+            if ai_ok:
+                tl = _target_path(
+                    config,
+                    str(local_result.get("type", "show")),
+                    str(local_result.get("title", "")),
+                    int(local_result["season"]) if local_result.get("season") is not None else None,
+                    int(local_result["year"]) if local_result.get("year") is not None else None,
+                )
+                ta = _target_path(
+                    config,
+                    str(ai_result.get("type", "unknown")),
+                    str(ai_result.get("title", "")),
+                    int(ai_result["season"]) if ai_result.get("season") is not None else None,
+                    int(ai_result["year"]) if ai_result.get("year") is not None else None,
+                )
+                override = _prompt_multi(
+                    folder, local_result, ai_result, tl, ta, len(media_files), config
+                )
+                if override is None:
+                    print(f"  [SKIP] User skipped: {folder}")
+                    continue
+                _apply_from_override(folder, override, media_files, config, dry_run)
                 continue
-            _apply_from_override(folder, override, media_files, config, dry_run)
+
+            _apply_result(folder, local_result, media_files, config, dry_run)
             continue
 
-        _handle_folder_result(
-            folder,
-            ai_result,
-            media_files,
-            config,
-            dry_run,
-            interactive,
-            confidence_threshold,
-        )
+        if ai_ok:
+            _handle_folder_result(
+                folder,
+                ai_result,
+                media_files,
+                config,
+                dry_run,
+                interactive,
+                confidence_threshold,
+            )
+        else:
+            print(f"  [SKIP] AI could not identify: {folder}")
 
 
 def _process_flat(
