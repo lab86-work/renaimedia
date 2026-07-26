@@ -192,6 +192,8 @@ def main() -> None:
     parser.add_argument(
         "source",
         type=Path,
+        nargs="?",
+        default=None,
         help="Source directory containing media files",
     )
     parser.add_argument(
@@ -264,6 +266,10 @@ def main() -> None:
         for m in list_models(config, provider_filter):
             print(m)
         sys.exit(0)
+
+    if args.source is None:
+        print("Error: Source directory is required.", file=sys.stderr)
+        sys.exit(1)
 
     source: Path = args.source.resolve()
     if not source.exists():
