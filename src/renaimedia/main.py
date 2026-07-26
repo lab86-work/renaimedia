@@ -6,33 +6,45 @@ from pathlib import Path
 
 from renaimedia.cache import set_cached
 from renaimedia.config import Config
-from renaimedia.identifier import (
-    identify_flat_folder,
-    identify_folder,
-)
+from renaimedia.identifier import identify_flat_folder, identify_folder
 from renaimedia.organizer import is_media_file, organize
 
 
+def _target_path(
+    config: Config, media_type: str, title: str, season: int | None, year: int | None
+) -> Path:
+    if media_type == "show" and season is not None:
+        return config.output_folder / "TV Shows" / title / f"Season {season}"
+    if media_type == "movie":
+        year_suffix = f" ({year})" if isinstance(year, int) else ""
+        return config.output_folder / "Movies" / f"{title}{year_suffix}"
+    return config.output_folder / title
+
+
 def _prompt_review(
-    source_name: str,
+    source: Path,
     media_type: str,
     title: str,
     season: int | None,
     year: int | None,
     confidence: int,
+    target: Path,
+    file_count: int,
+    config: Config,
 ) -> dict[str, str | int | None] | None:
     while True:
         print()
-        print(f"  Source folder: {source_name}")
+        print(f"  mv  {source}/*")
+        print(f"  ->  {target}/")
+        print()
+        print(f"  Type      : {'TV Show' if media_type == 'show' else 'Movie'}")
+        print(f"  Title     : {title}")
         if media_type == "show":
-            print("  Type   : TV Show")
-            print(f"  Title  : {title}")
-            print(f"  Season : {season if season is not None else '?'}")
+            print(f"  Season    : {season if season is not None else '?'}")
         else:
-            print("  Type   : Movie")
-            print(f"  Title  : {title}")
-            print(f"  Year   : {year if year is not None else '?'}")
+            print(f"  Year      : {year if year is not None else '?'}")
         print(f"  Confidence: {confidence}%")
+        print(f"  Files     : {file_count}")
         print("  [y] accept  [e] edit  [s] skip  [q] quit")
         choice = input("  > ").strip().lower()
 
@@ -67,6 +79,13 @@ def _prompt_review(
             media_type = new_type
             title = new_title
             confidence = 100
+            target = _target_path(
+                config=config,
+                media_type=media_type,
+                title=title,
+                season=season,
+                year=year,
+            )
         else:
             print("  Invalid choice. Use y/e/s/q")
 
@@ -162,11 +181,11 @@ def _process_subfolders(
     use_cache: bool,
 ) -> None:
     for folder in subfolders:
-        subfiles = [f for f in folder.iterdir() if f.is_file() and not f.name.startswith(".")]
+        items = list(folder.iterdir())
+        subfiles = [f for f in items if f.is_file() and not f.name.startswith(".")]
         if not subfiles:
-            grandkids = [f for f in folder.iterdir() if f.is_dir() and not f.name.startswith(".")]
+            grandkids = [f for f in items if f.is_dir() and not f.name.startswith(".")]
             if grandkids:
-                print(f"  [DRILL] Recursing into: {folder.name}")
                 _process_subfolders(
                     grandkids,
                     config,
@@ -178,7 +197,10 @@ def _process_subfolders(
             continue
 
         result = identify_folder(folder, config, use_cache)
-        _handle_result(folder, result, subfiles, config, dry_run, interactive, confidence_threshold)
+        media_files = [f for f in subfiles if is_media_file(f)]
+        _handle_folder_result(
+            folder, result, media_files, config, dry_run, interactive, confidence_threshold
+        )
 
 
 def _process_flat(
@@ -204,13 +226,16 @@ def _process_flat(
             and (not matched_files or f.name in matched_files)
         ]
         source = Path(result.get("_source", str(folder)))
-        _handle_result(source, result, files, config, dry_run, interactive, confidence_threshold)
+        media_files = [f for f in files if is_media_file(f)]
+        _handle_folder_result(
+            source, result, media_files, config, dry_run, interactive, confidence_threshold
+        )
 
 
-def _handle_result(
+def _handle_folder_result(
     source: Path,
     result: dict[str, str | int | list[str] | None],
-    files: list[Path],
+    media_files: list[Path],
     config: Config,
     dry_run: bool,
     interactive: bool,
@@ -226,20 +251,35 @@ def _handle_result(
         print(f"  [SKIP] Could not identify: {source}")
         return
 
-    media_files = [f for f in files if is_media_file(f)]
     if not media_files:
         print(f"  [SKIP] No media files in: {source}")
+        return
+
+    target = _target_path(
+        config,
+        media_type,
+        title,
+        int(season) if isinstance(season, int) else None,
+        int(year) if isinstance(year, int) else None,
+    )
+
+    all_there = all((target / f.name).exists() for f in media_files)
+    if target.exists() and all_there:
+        print(f"  [SKIP] Already organized: {source}")
         return
 
     needs_review = interactive or confidence < confidence_threshold
     if needs_review:
         result_override = _prompt_review(
-            source.name,
+            source,
             media_type,
             title,
             int(season) if isinstance(season, int) else None,
             int(year) if isinstance(year, int) else None,
             confidence,
+            target,
+            len(media_files),
+            config,
         )
         if result_override is None:
             print(f"  [SKIP] User skipped: {source}")
@@ -248,6 +288,13 @@ def _handle_result(
         title = str(result_override["title"])
         season = result_override["season"]
         year = result_override["year"]
+        target = _target_path(
+            config,
+            media_type,
+            title,
+            int(season) if isinstance(season, int) else None,
+            int(year) if isinstance(year, int) else None,
+        )
         set_cached(
             source,
             {
@@ -259,21 +306,8 @@ def _handle_result(
             },
         )
 
-    if media_type == "show" and isinstance(season, int):
-        target = config.output_folder / "TV Shows" / title / f"Season {season}"
-    elif media_type == "movie":
-        year_info = f" ({year})" if isinstance(year, int) else ""
-        target = config.output_folder / "Movies" / f"{title}{year_info}"
-    else:
-        target = config.output_folder / title
-
-    all_there = all((target / f.name).exists() for f in media_files)
-    if target.exists() and all_there:
-        print(f"  [SKIP] Already organized: {source}")
-        return
-
     print(f"  [{confidence}%] [{'DRY' if dry_run else 'MOVE'}] {len(media_files)} files")
-    print(f"  mv  {source}")
+    print(f"  mv  {source}/*")
     print(f"  ->  {target}/")
 
     if not dry_run:

@@ -42,10 +42,13 @@ Examples:
 
 def identify_folder(folder_path: Path, config: Config, use_cache: bool = True) -> dict[str, Any]:
     folder_name = folder_path.name
-    files = sorted(
-        [f.name for f in folder_path.iterdir() if f.is_file() and not f.name.startswith(".")]
-    )
-    if not files:
+    parent_name = folder_path.parent.name if folder_path.parent != folder_path else ""
+    items = list(folder_path.iterdir())
+
+    files = sorted(f.name for f in items if f.is_file() and not f.name.startswith("."))
+    subdirs = sorted(f.name + "/" for f in items if f.is_dir() and not f.name.startswith("."))
+
+    if not files and not subdirs:
         return {"type": "unknown", "title": None, "season": None, "year": None}
 
     if use_cache:
@@ -54,14 +57,16 @@ def identify_folder(folder_path: Path, config: Config, use_cache: bool = True) -
             print(f"  AI: {folder_name} [cached]")
             return cached
 
-    files_str = "\n".join(files[:50])
-    user_prompt = f"Folder: {folder_name}\nFiles:\n{files_str}"
+    content_list = subdirs + files
+    content_str = "\n".join(content_list[:60])
+
+    user_prompt = f"Folder: {folder_name}\nParent: {parent_name}\nContents:\n{content_str}"
 
     print(f"  AI: identifying {folder_name}...", end="", flush=True)
-    content, elapsed = _call_openrouter(user_prompt, config)
+    response_text, elapsed = _call_openrouter(user_prompt, config)
     print(f" done ({elapsed:.1f}s)")
 
-    result = _parse_response(content)
+    result = _parse_response(response_text)
     if use_cache:
         set_cached(folder_path, result)
     return result
@@ -97,12 +102,12 @@ def identify_flat_folder(
 
     files_str = "\n".join(f.name for f in files[:100])
     folder_name = folder_path.name
+    parent_name = folder_path.parent.name if folder_path.parent != folder_path else ""
     user_prompt = (
-        f"Folder: {folder_name}\n"
-        f"Files:\n{files_str}\n\n"
+        f"Folder: {folder_name}\nParent: {parent_name}\nFiles:\n{files_str}\n\n"
         f"NOTE: This folder may contain MULTIPLE shows/movies mixed together. "
         f"Return a JSON ARRAY of objects, one per distinct show/movie found. "
-        f"For each object, include the type, title, season/year, and also a "
+        f"For each object, include the type, title, season/year, confidence, and also a "
         f'"files" array listing which filenames belong to that show/movie.'
     )
 
