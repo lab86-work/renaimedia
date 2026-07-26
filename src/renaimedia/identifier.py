@@ -88,6 +88,19 @@ def identify_root_folder(folder_path: Path, config: Config) -> list[dict[str, An
     return results
 
 
+def identify_file(filepath: Path, config: Config) -> dict[str, Any]:
+    """Identify a single file by its filename."""
+    print(f"  AI: identifying {filepath.name}...", end="", flush=True)
+    prompt = f"File: {filepath.name}\nIdentify this single file as a TV show or movie."
+    try:
+        content, elapsed = _call_openrouter(prompt, config)
+        print(f" done ({elapsed:.1f}s)")
+        return _parse_response(content)
+    except Exception as e:
+        print(f" error: {e}")
+        return {"type": "unknown", "title": None, "season": None, "year": None}
+
+
 def identify_flat_folder(
     folder_path: Path, config: Config, use_cache: bool = True
 ) -> list[dict[str, Any]]:

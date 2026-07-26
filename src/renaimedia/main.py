@@ -7,7 +7,7 @@ from typing import Any
 
 from renaimedia.cache import set_cached
 from renaimedia.config import Config
-from renaimedia.identifier import identify_flat_folder, identify_folder, list_models
+from renaimedia.identifier import identify_file, identify_folder, list_models
 from renaimedia.local_parse import local_identify
 from renaimedia.organizer import is_media_file, organize, safe_name
 
@@ -352,7 +352,9 @@ def main() -> None:
         )
 
     if files_at_root:
-        print(f"  [SKIP] {len(files_at_root)} loose file(s) at source root, ignoring")
+        _process_flat_files(
+            source, files_at_root, config, args.dry_run, args.interactive, args.confidence
+        )
 
 
 def _process_subfolders(
@@ -452,41 +454,6 @@ def _process_subfolders(
             )
         else:
             print(f"  [SKIP] AI could not identify: {folder}")
-
-
-def _process_flat(
-    folder: Path,
-    config: Config,
-    dry_run: bool,
-    interactive: bool,
-    confidence_threshold: int,
-    use_cache: bool,
-) -> None:
-    results = identify_flat_folder(folder, config, use_cache)
-    if not results:
-        print(f"  [SKIP] Could not identify content in: {folder}")
-        return
-
-    for result in results:
-        matched_files = result.get("files", [])
-        files = [
-            f
-            for f in folder.iterdir()
-            if f.is_file()
-            and not f.name.startswith(".")
-            and (not matched_files or f.name in matched_files)
-        ]
-        source = Path(result.get("_source", str(folder)))
-        media_files = [f for f in files if is_media_file(f)]
-        _handle_folder_result(
-            source,
-            result,
-            media_files,
-            config,
-            dry_run,
-            interactive,
-            confidence_threshold,
-        )
 
 
 def _handle_folder_result(
@@ -633,3 +600,57 @@ def _get_confidence(result: dict[str, Any] | dict[str, str | int | list[str] | N
     if isinstance(raw, (int, float)):
         return int(raw)
     return 0
+
+
+def _process_flat_files(
+    folder: Path,
+    files: list[Path],
+    config: Config,
+    dry_run: bool,
+    interactive: bool,
+    confidence_threshold: int,
+) -> None:
+    media_files = [f for f in files if is_media_file(f)]
+    if not media_files:
+        return
+
+    file_names = ", ".join(f.name for f in media_files[:5])
+    print(f"  Loose files: {file_names}{'...' if len(media_files) > 5 else ''}")
+
+    for f in media_files:
+        local = local_identify(f)
+        if local and _get_confidence(local) >= confidence_threshold and not interactive:
+            _apply_result(f, local, [f], config, dry_run)
+            continue
+
+        try:
+            ai_result = identify_file(f, config)
+            ai_result["_source"] = str(folder)
+
+            if local:
+                tl = _target_path(
+                    config,
+                    str(local.get("type", "show")),
+                    str(local.get("title", "")),
+                    int(local["season"]) if local.get("season") is not None else None,
+                    int(local["year"]) if local.get("year") is not None else None,
+                )
+                ta = _target_path(
+                    config,
+                    str(ai_result.get("type", "unknown")),
+                    str(ai_result.get("title", "")),
+                    int(ai_result["season"]) if ai_result.get("season") is not None else None,
+                    int(ai_result["year"]) if ai_result.get("year") is not None else None,
+                )
+                override = _prompt_multi(f, local, ai_result, tl, ta, 1, config)
+                if override:
+                    _apply_from_override(f, override, [f], config, dry_run)
+            elif ai_result.get("type") != "unknown" and ai_result.get("title"):
+                _handle_folder_result(
+                    f, ai_result, [f], config, dry_run, interactive, confidence_threshold
+                )
+            else:
+                print(f"  [SKIP] Could not identify: {f.name}")
+        except Exception as e:
+            print(f" error: {e}")
+            print(f"  [SKIP] Could not identify: {f.name}")
