@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import httpx
 
+from renaimedia.cache import get_cached, set_cached
 from renaimedia.config import Config
 
 SYSTEM_PROMPT = """\
@@ -39,13 +40,19 @@ Examples:
 {"type": "show", "title": "Money Heist", "season": 3, "confidence": 85}"""
 
 
-def identify_folder(folder_path: Path, config: Config) -> dict[str, Any]:
+def identify_folder(folder_path: Path, config: Config, use_cache: bool = True) -> dict[str, Any]:
     folder_name = folder_path.name
     files = sorted(
         [f.name for f in folder_path.iterdir() if f.is_file() and not f.name.startswith(".")]
     )
     if not files:
         return {"type": "unknown", "title": None, "season": None, "year": None}
+
+    if use_cache:
+        cached = get_cached(folder_path)
+        if cached is not None:
+            print(f"  AI: {folder_name} [cached]")
+            return cached
 
     files_str = "\n".join(files[:50])
     user_prompt = f"Folder: {folder_name}\nFiles:\n{files_str}"
@@ -54,7 +61,10 @@ def identify_folder(folder_path: Path, config: Config) -> dict[str, Any]:
     content, elapsed = _call_openrouter(user_prompt, config)
     print(f" done ({elapsed:.1f}s)")
 
-    return _parse_response(content)
+    result = _parse_response(content)
+    if use_cache:
+        set_cached(folder_path, result)
+    return result
 
 
 def identify_root_folder(folder_path: Path, config: Config) -> list[dict[str, Any]]:
@@ -69,10 +79,21 @@ def identify_root_folder(folder_path: Path, config: Config) -> list[dict[str, An
     return results
 
 
-def identify_flat_folder(folder_path: Path, config: Config) -> list[dict[str, Any]]:
+def identify_flat_folder(
+    folder_path: Path, config: Config, use_cache: bool = True
+) -> list[dict[str, Any]]:
     files = sorted([f for f in folder_path.iterdir() if f.is_file() and not f.name.startswith(".")])
     if not files:
         return []
+
+    if use_cache:
+        cached = get_cached(folder_path)
+        if cached is not None:
+            print(f"  AI: {folder_path.name} [cached]")
+            result = cached.get("_results")
+            if isinstance(result, list):
+                return result
+            return [cached]
 
     files_str = "\n".join(f.name for f in files[:100])
     folder_name = folder_path.name
@@ -127,6 +148,8 @@ def identify_flat_folder(folder_path: Path, config: Config) -> list[dict[str, An
                 remaining_parsed["_source"] = str(folder_path)
                 results.append(remaining_parsed)
 
+        if use_cache:
+            set_cached(folder_path, {"_results": results, "_cached": True})
         return results
     except ValueError, json.JSONDecodeError:
         return []

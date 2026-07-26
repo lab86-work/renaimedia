@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from renaimedia.cache import set_cached
 from renaimedia.config import Config
 from renaimedia.identifier import (
     identify_flat_folder,
@@ -104,6 +105,11 @@ def main() -> None:
         help="Auto-accept threshold in %% (0-100, default: 70). "
         "Lower-confidence matches will prompt for review.",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Skip AI call cache, always query OpenRouter",
+    )
     args = parser.parse_args()
 
     source: Path = args.source.resolve()
@@ -133,13 +139,18 @@ def main() -> None:
     if args.dry_run:
         print("[DRY RUN - no changes will be made]")
     print(f"Confidence threshold: {args.confidence}%")
+    if args.no_cache:
+        print("[CACHE DISABLED]")
     print()
 
+    use_cache = not args.no_cache
     if subs:
-        _process_subfolders(subs, config, args.dry_run, args.interactive, args.confidence)
+        _process_subfolders(
+            subs, config, args.dry_run, args.interactive, args.confidence, use_cache
+        )
 
     if files_at_root:
-        _process_flat(source, config, args.dry_run, args.interactive, args.confidence)
+        _process_flat(source, config, args.dry_run, args.interactive, args.confidence, use_cache)
 
 
 def _process_subfolders(
@@ -148,6 +159,7 @@ def _process_subfolders(
     dry_run: bool,
     interactive: bool,
     confidence_threshold: int,
+    use_cache: bool,
 ) -> None:
     for folder in subfolders:
         subfiles = [f for f in folder.iterdir() if f.is_file() and not f.name.startswith(".")]
@@ -155,10 +167,17 @@ def _process_subfolders(
             grandkids = [f for f in folder.iterdir() if f.is_dir() and not f.name.startswith(".")]
             if grandkids:
                 print(f"  [DRILL] Recursing into: {folder.name}")
-                _process_subfolders(grandkids, config, dry_run, interactive, confidence_threshold)
+                _process_subfolders(
+                    grandkids,
+                    config,
+                    dry_run,
+                    interactive,
+                    confidence_threshold,
+                    use_cache,
+                )
             continue
 
-        result = identify_folder(folder, config)
+        result = identify_folder(folder, config, use_cache)
         _handle_result(folder, result, subfiles, config, dry_run, interactive, confidence_threshold)
 
 
@@ -168,10 +187,11 @@ def _process_flat(
     dry_run: bool,
     interactive: bool,
     confidence_threshold: int,
+    use_cache: bool,
 ) -> None:
-    results = identify_flat_folder(folder, config)
+    results = identify_flat_folder(folder, config, use_cache)
     if not results:
-        print(f"  [SKIP] Could not identify content in: {folder.name}")
+        print(f"  [SKIP] Could not identify content in: {folder}")
         return
 
     for result in results:
@@ -203,12 +223,12 @@ def _handle_result(
     confidence = _get_confidence(result)
 
     if media_type == "unknown" or not title:
-        print(f"  [SKIP] Could not identify: {source.name}")
+        print(f"  [SKIP] Could not identify: {source}")
         return
 
     media_files = [f for f in files if is_media_file(f)]
     if not media_files:
-        print(f"  [SKIP] No media files in: {source.name}")
+        print(f"  [SKIP] No media files in: {source}")
         return
 
     needs_review = interactive or confidence < confidence_threshold
@@ -222,34 +242,39 @@ def _handle_result(
             confidence,
         )
         if result_override is None:
-            print(f"  [SKIP] User skipped: {source.name}")
+            print(f"  [SKIP] User skipped: {source}")
             return
         media_type = str(result_override["type"])
         title = str(result_override["title"])
         season = result_override["season"]
         year = result_override["year"]
+        set_cached(
+            source,
+            {
+                "type": media_type,
+                "title": title,
+                "season": season,
+                "year": year,
+                "confidence": confidence,
+            },
+        )
 
     if media_type == "show" and isinstance(season, int):
         target = config.output_folder / "TV Shows" / title / f"Season {season}"
-        desc = f"{title} - Season {season}"
     elif media_type == "movie":
         year_info = f" ({year})" if isinstance(year, int) else ""
         target = config.output_folder / "Movies" / f"{title}{year_info}"
-        desc = f"{title}{year_info}"
     else:
         target = config.output_folder / title
-        desc = title
 
     all_there = all((target / f.name).exists() for f in media_files)
     if target.exists() and all_there:
-        print(f"  [SKIP] Already organized: {desc}")
+        print(f"  [SKIP] Already organized: {source}")
         return
 
-    print(
-        f"  [{confidence}%] [{'DRY' if dry_run else 'MOVE'}] {desc}"
-        f" <- {len(media_files)} files from {source.name}"
-    )
-    print(f"  -> {target}/")
+    print(f"  [{confidence}%] [{'DRY' if dry_run else 'MOVE'}] {len(media_files)} files")
+    print(f"  mv  {source}")
+    print(f"  ->  {target}/")
 
     if not dry_run:
         organize(
