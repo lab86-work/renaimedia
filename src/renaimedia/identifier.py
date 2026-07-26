@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -49,8 +50,11 @@ def identify_folder(folder_path: Path, config: Config) -> dict[str, Any]:
     files_str = "\n".join(files[:50])
     user_prompt = f"Folder: {folder_name}\nFiles:\n{files_str}"
 
-    response = _call_openrouter(user_prompt, config)
-    return _parse_response(response)
+    print(f"  AI: identifying {folder_name}...", end="", flush=True)
+    content, elapsed = _call_openrouter(user_prompt, config)
+    print(f" done ({elapsed:.1f}s)")
+
+    return _parse_response(content)
 
 
 def identify_root_folder(folder_path: Path, config: Config) -> list[dict[str, Any]]:
@@ -81,10 +85,12 @@ def identify_flat_folder(folder_path: Path, config: Config) -> list[dict[str, An
         f'"files" array listing which filenames belong to that show/movie.'
     )
 
-    response = _call_openrouter(user_prompt, config)
+    print(f"  AI: identifying {folder_name}...", end="", flush=True)
+    content, elapsed = _call_openrouter(user_prompt, config)
+    print(f" done ({elapsed:.1f}s)")
 
     try:
-        parsed = _parse_response(response)
+        parsed = _parse_response(content)
         if isinstance(parsed, list):
             for item in parsed:
                 if "_source" not in item:
@@ -110,8 +116,9 @@ def identify_flat_folder(folder_path: Path, config: Config) -> list[dict[str, An
                 f"Remaining files (may be another show/movie):\n"
                 + "\n".join(f.name for f in remaining[:50])
             )
-            remaining_response = _call_openrouter(remaining_prompt, config)
-            remaining_parsed = _parse_response(remaining_response)
+            remaining_content, remaining_elapsed = _call_openrouter(remaining_prompt, config)
+            print(f"  AI: second pass... done ({remaining_elapsed:.1f}s)")
+            remaining_parsed = _parse_response(remaining_content)
             if isinstance(remaining_parsed, list):
                 for item in remaining_parsed:
                     item["_source"] = str(folder_path)
@@ -125,7 +132,7 @@ def identify_flat_folder(folder_path: Path, config: Config) -> list[dict[str, An
         return []
 
 
-def _call_openrouter(user_prompt: str, config: Config) -> str:
+def _call_openrouter(user_prompt: str, config: Config) -> tuple[str, float]:
     headers = {
         "Authorization": f"Bearer {config.openrouter_api_key}",
         "Content-Type": "application/json",
@@ -142,6 +149,7 @@ def _call_openrouter(user_prompt: str, config: Config) -> str:
         "max_tokens": 1000,
     }
 
+    start = time.monotonic()
     with httpx.Client(timeout=config.request_timeout) as client:
         response = client.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -149,8 +157,9 @@ def _call_openrouter(user_prompt: str, config: Config) -> str:
             json=payload,
         )
         response.raise_for_status()
+        elapsed = time.monotonic() - start
         content: str = response.json()["choices"][0]["message"]["content"]
-        return content
+        return content, elapsed
 
 
 def _parse_response(content: str) -> dict[str, Any]:
