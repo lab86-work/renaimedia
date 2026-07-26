@@ -230,27 +230,38 @@ def main() -> None:
         help="Skip local parsing (guessit+PTN), always use AI",
     )
     parser.add_argument(
+        "--provider",
+        type=str,
+        default=None,
+        metavar="PROVIDER",
+        help="OpenRouter provider (openai, anthropic, google, etc.)",
+    )
+    parser.add_argument(
         "--model",
         type=str,
         default=None,
-        metavar="PROVIDER/MODEL",
-        help="OpenRouter model to use (overrides OPENROUTER_MODEL env var)",
+        metavar="MODEL",
+        help="Model name (combines with --provider as provider/model)",
     )
     parser.add_argument(
         "--list-models",
-        action="store_true",
-        help="List available OpenRouter models and exit",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="PROVIDER",
+        help="List available OpenRouter models (optionally filter by provider)",
     )
     args = parser.parse_args()
 
-    if args.list_models:
+    if args.list_models is not None:
         try:
             config = Config.from_env()
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
+        provider_filter = args.list_models or None
         print("Available OpenRouter models:")
-        for m in list_models(config):
+        for m in list_models(config, provider_filter):
             print(m)
         sys.exit(0)
 
@@ -271,7 +282,12 @@ def main() -> None:
     if args.output:
         config.output_folder = args.output.resolve()
     if args.model:
-        config.openrouter_model = args.model
+        if args.provider and "/" not in args.model:
+            config.openrouter_model = f"{args.provider}/{args.model}"
+        else:
+            config.openrouter_model = args.model
+    elif args.provider:
+        config.openrouter_model = f"{args.provider}/"
     config.output_folder.mkdir(parents=True, exist_ok=True)
 
     subs = [f for f in source.iterdir() if f.is_dir() and not f.name.startswith(".")]

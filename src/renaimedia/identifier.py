@@ -203,7 +203,7 @@ def _call_openrouter(user_prompt: str, config: Config) -> tuple[str, float]:
         return content, elapsed
 
 
-def list_models(config: Config) -> list[str]:
+def list_models(config: Config, provider: str | None = None) -> list[str]:
     headers = {
         "Authorization": f"Bearer {config.openrouter_api_key}",
         "Content-Type": "application/json",
@@ -220,6 +220,8 @@ def list_models(config: Config) -> list[str]:
             for m in data.get("data", []):
                 mid = m.get("id", "")
                 name = m.get("name", mid)
+                if provider and not mid.startswith(f"{provider}/"):
+                    continue
                 models.append(f"  {mid}  ({name})")
             return sorted(models)
     except Exception as e:
