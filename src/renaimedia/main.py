@@ -229,6 +229,13 @@ def main() -> None:
         action="store_true",
         help="Skip local parsing (guessit+PTN), always use AI",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        metavar="PROVIDER/MODEL",
+        help="OpenRouter model to use (overrides OPENROUTER_MODEL env var)",
+    )
     args = parser.parse_args()
 
     source: Path = args.source.resolve()
@@ -247,6 +254,8 @@ def main() -> None:
 
     if args.output:
         config.output_folder = args.output.resolve()
+    if args.model:
+        config.openrouter_model = args.model
     config.output_folder.mkdir(parents=True, exist_ok=True)
 
     subs = [f for f in source.iterdir() if f.is_dir() and not f.name.startswith(".")]
@@ -254,6 +263,7 @@ def main() -> None:
 
     print(f"Source: {source}")
     print(f"Output: {config.output_folder}")
+    print(f"Model: {config.openrouter_model}")
     print(f"Subfolders: {len(subs)}, Files at root: {len(files_at_root)}")
     if args.dry_run:
         print("[DRY RUN - no changes will be made]")
