@@ -75,8 +75,17 @@ def organize(
 
 def safe_name(name: str) -> str:
     name = name.strip()
-    for ch in '/\\:*?"<>|\0':
-        name = name.replace(ch, " - " if ch in "/\\" else "")
+    result: list[str] = []
+    for ch in name:
+        if ch.isalnum() or ch in " .-_":
+            result.append(ch)
+        elif ch in "/\\":
+            result.append(" - ")
+        elif ch in ",!?'\"":
+            pass
+        else:
+            result.append(" ")
+    name = "".join(result)
     while "  " in name:
         name = name.replace("  ", " ")
     while " - - " in name:
