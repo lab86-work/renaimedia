@@ -352,14 +352,7 @@ def main() -> None:
         )
 
     if files_at_root:
-        _process_flat(
-            source,
-            config,
-            args.dry_run,
-            args.interactive,
-            args.confidence,
-            use_cache,
-        )
+        print(f"  [SKIP] {len(files_at_root)} loose file(s) at source root, ignoring")
 
 
 def _process_subfolders(
