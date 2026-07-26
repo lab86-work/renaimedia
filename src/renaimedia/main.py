@@ -41,45 +41,13 @@ def _prompt_multi(
     """Prompt user to choose between local parse and AI result."""
     while True:
         print()
-        print(f"  mv  {source}/*")
+        if local:
+            _print_option(1, "Local", local, target_local)
+        if ai:
+            _print_option(2, "AI", ai, target_ai)
+        print(f"      mv  {source}/* -> ...")
         print()
-
-        if local:
-            lt = str(local.get("title", "?"))
-            lc = _get_confidence(local)
-            ls = local.get("season")
-            ly = local.get("year")
-            ltp = "TV Show" if local.get("type") == "show" else "Movie"
-            print(f"  [1] Local  ({lc}%)  {ltp}: {lt}", end="")
-            if ls is not None:
-                print(f"  S{int(ls)}", end="")
-            if ly is not None:
-                print(f"  ({int(ly)})", end="")
-            print()
-            if target_local:
-                print(f"      -> {target_local}/")
-
-        if ai:
-            at = str(ai.get("title", "?"))
-            ac = _get_confidence(ai)
-            as_ = ai.get("season")
-            ay = ai.get("year")
-            atp = "TV Show" if ai.get("type") == "show" else "Movie"
-            print(f"  [2] AI     ({ac}%)  {atp}: {at}", end="")
-            if as_ is not None:
-                print(f"  S{int(as_)}", end="")
-            if ay is not None:
-                print(f"  ({int(ay)})", end="")
-            print()
-            if target_ai:
-                print(f"      -> {target_ai}/")
-
-        opts = []
-        if local:
-            opts.append("1")
-        if ai:
-            opts.append("2")
-        print("  [e] edit  [s] skip  [q] quit")
+        print("  [1/2] pick  [e] edit  [s] skip  [q] quit")
         choice = input("  > ").strip().lower()
 
         if choice == "q":
@@ -112,15 +80,40 @@ def _prompt_multi(
                         print(f"  Invalid year: {raw_year}")
                 s = None
             return _result_to_dict(new_type, new_title, s, y)
-        if choice in opts:
+        if choice in ("1", "2"):
             selected = local if choice == "1" else ai
             if selected:
+                stype = str(selected.get("type", "show"))
+                stitle = str(selected.get("title", ""))
+                sseason = selected.get("season")
+                syear = selected.get("year")
                 return _result_to_dict(
-                    str(selected.get("type", "show")),
-                    str(selected.get("title", "")),
-                    int(selected["season"]) if selected.get("season") is not None else None,
-                    int(selected["year"]) if selected.get("year") is not None else None,
+                    stype,
+                    stitle,
+                    int(sseason) if sseason is not None else None,
+                    int(syear) if syear is not None else None,
                 )
+
+
+def _print_option(num: int, label: str, result: dict[str, Any], target: Path | None) -> None:
+    c = _get_confidence(result)
+    mt = str(result.get("type", "show"))
+    tt = str(result.get("title", "?"))
+    sn = result.get("season")
+    yr = result.get("year")
+
+    if label:
+        print(f"  [{num}] {label} ({c}%)")
+    else:
+        print(f"  ({c}%)")
+    print(f"      Type   : {'TV Show' if mt == 'show' else 'Movie'}")
+    print(f"      Title  : {tt}")
+    if mt == "show" and sn is not None:
+        print(f"      Season : {int(sn)}")
+    if mt == "movie" and yr is not None:
+        print(f"      Year   : {int(yr)}")
+    if target:
+        print(f"      -> {target}/")
 
 
 def _prompt_review(
@@ -136,17 +129,16 @@ def _prompt_review(
 ) -> dict[str, str | int | None] | None:
     while True:
         print()
-        print(f"  mv  {source}/*")
-        print(f"  ->  {target}/")
-        print()
-        print(f"  Type      : {'TV Show' if media_type == 'show' else 'Movie'}")
-        print(f"  Title     : {title}")
+        print(f"  [{confidence}%]")
+        print(f"  Type    : {'TV Show' if media_type == 'show' else 'Movie'}")
+        print(f"  Title   : {title}")
         if media_type == "show":
-            print(f"  Season    : {season if season is not None else '?'}")
+            print(f"  Season  : {season if season is not None else '?'}")
         else:
-            print(f"  Year      : {year if year is not None else '?'}")
-        print(f"  Confidence: {confidence}%")
-        print(f"  Files     : {file_count}")
+            print(f"  Year    : {year if year is not None else '?'}")
+        print(f"  Files   : {file_count}")
+        print(f"  mv  {source}/* -> {target}/")
+        print()
         print("  [y] accept  [e] edit  [s] skip  [q] quit")
         choice = input("  > ").strip().lower()
 
@@ -330,7 +322,15 @@ def _process_subfolders(
             local_result = local_identify(folder)
             if local_result:
                 lc = _get_confidence(local_result)
-                print(f"  [local] {folder.name} -> {local_result.get('title')} ({lc}%)")
+                lt = local_result.get("title")
+                ls = local_result.get("season")
+                ly = local_result.get("year")
+                parts = [f"[local] {folder.name} -> {lt} ({lc}%)"]
+                if ls is not None:
+                    parts.append(f"S{int(ls)}")
+                if ly is not None:
+                    parts.append(f"({int(ly)})")
+                print("  " + " ".join(parts))
 
         if (
             local_result
