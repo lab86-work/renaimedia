@@ -262,9 +262,16 @@ def main() -> None:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         provider_filter = args.list_models or None
-        print("Available OpenRouter models:")
-        for m in list_models(config, provider_filter):
+        if provider_filter:
+            print(f"Models for provider '{provider_filter}':")
+        else:
+            print("Available OpenRouter models:")
+        models = list_models(config, provider_filter)
+        if not models:
+            print("  No models found. Check your API key or provider name.")
+        for m in models:
             print(m)
+        print(f"\nTotal: {len(models)} models")
         sys.exit(0)
 
     if args.source is None:

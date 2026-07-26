@@ -216,14 +216,23 @@ def list_models(config: Config, provider: str | None = None) -> list[str]:
             )
             response.raise_for_status()
             data = response.json()
-            models = []
+            all_models: list[str] = []
+            filtered: list[str] = []
             for m in data.get("data", []):
                 mid = m.get("id", "")
                 name = m.get("name", mid)
-                if provider and not mid.startswith(f"{provider}/"):
-                    continue
-                models.append(f"  {mid}  ({name})")
-            return sorted(models)
+                line = f"  {mid}  ({name})"
+                all_models.append(line)
+                if provider and mid.startswith(f"{provider}/"):
+                    filtered.append(line)
+            if filtered:
+                return sorted(filtered)
+            if provider:
+                return [
+                    f"  No models found for provider '{provider}'",
+                    f"  Total models available: {len(all_models)}",
+                ]
+            return sorted(all_models)
     except Exception as e:
         return [f"  Error fetching models: {e}"]
 
