@@ -178,7 +178,7 @@ def _call_openrouter(user_prompt: str, config: Config) -> tuple[str, float]:
         "HTTP-Referer": "https://github.com/lsk242/renaimedia",
         "X-Title": "renaimedia",
     }
-    payload = {
+    payload: dict[str, Any] = {
         "model": config.openrouter_model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -187,6 +187,11 @@ def _call_openrouter(user_prompt: str, config: Config) -> tuple[str, float]:
         "temperature": 0.1,
         "max_tokens": 1000,
     }
+    if config.provider_order:
+        payload["provider"] = {
+            "order": config.provider_order,
+            "allow_fallbacks": config.allow_fallbacks,
+        }
 
     start = time.monotonic()
     with httpx.Client(timeout=config.request_timeout) as client:

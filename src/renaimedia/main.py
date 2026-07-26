@@ -253,6 +253,18 @@ def main() -> None:
         metavar="PROVIDER",
         help="List available OpenRouter models (optionally filter by provider)",
     )
+    parser.add_argument(
+        "--provider-order",
+        type=str,
+        default=None,
+        metavar="P1,P2,...",
+        help="Preferred OpenRouter provider order (comma-separated)",
+    )
+    parser.add_argument(
+        "--no-fallback",
+        action="store_true",
+        help="Only use specified providers, never fall back to others",
+    )
     args = parser.parse_args()
 
     if args.list_models is not None:
@@ -294,6 +306,10 @@ def main() -> None:
 
     if args.output:
         config.output_folder = args.output.resolve()
+    if args.provider_order:
+        config.provider_order = [p.strip() for p in args.provider_order.split(",") if p.strip()]
+    if args.no_fallback:
+        config.allow_fallbacks = False
     if args.model:
         if args.provider and "/" not in args.model:
             config.openrouter_model = f"{args.provider}/{args.model}"
@@ -309,6 +325,9 @@ def main() -> None:
     print(f"Source: {source}")
     print(f"Output: {config.output_folder}")
     print(f"Model: {config.openrouter_model}")
+    if config.provider_order:
+        fallback = "" if config.allow_fallbacks else " (no fallback)"
+        print(f"Provider order: {', '.join(config.provider_order)}{fallback}")
     print(f"Subfolders: {len(subs)}, Files at root: {len(files_at_root)}")
     if args.dry_run:
         print("[DRY RUN - no changes will be made]")
