@@ -9,18 +9,19 @@ from renaimedia.cache import set_cached
 from renaimedia.config import Config
 from renaimedia.identifier import identify_flat_folder, identify_folder
 from renaimedia.local_parse import local_identify
-from renaimedia.organizer import is_media_file, organize
+from renaimedia.organizer import is_media_file, organize, safe_name
 
 
 def _target_path(
     config: Config, media_type: str, title: str, season: int | None, year: int | None
 ) -> Path:
+    name = safe_name(title)
     if media_type == "show" and season is not None:
-        return config.output_folder / "TV Shows" / title / f"Season {season}"
+        return config.output_folder / "TV Shows" / name / f"Season {season}"
     if media_type == "movie":
         year_suffix = f" ({year})" if isinstance(year, int) else ""
-        return config.output_folder / "Movies" / f"{title}{year_suffix}"
-    return config.output_folder / title
+        return config.output_folder / "Movies" / f"{name}{year_suffix}"
+    return config.output_folder / name
 
 
 def _result_to_dict(

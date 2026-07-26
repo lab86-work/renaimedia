@@ -40,7 +40,7 @@ def organize(
     config: Config,
     media_type: str = "show",
 ) -> Path:
-    safe_title = _safe_name(title)
+    safe_title = safe_name(title)
 
     if media_type == "show" and season is not None:
         target_dir = config.output_folder / "TV Shows" / safe_title / f"Season {season}"
@@ -73,12 +73,13 @@ def organize(
     return target_dir
 
 
-def _safe_name(name: str) -> str:
+def safe_name(name: str) -> str:
     name = name.strip()
-    name = name.replace("/", " - ").replace("\\", " - ")
-    name = name.replace(":", " -").replace("*", "").replace("?", "")
-    name = name.replace('"', "'").replace("<", "").replace(">", "").replace("|", "")
+    for ch in '/\\:*?"<>|\0':
+        name = name.replace(ch, " - " if ch in "/\\" else "")
     while "  " in name:
         name = name.replace("  ", " ")
-    name = name.rstrip(" .")
+    while " - - " in name:
+        name = name.replace(" - - ", " - ")
+    name = name.rstrip(" .-")
     return name
