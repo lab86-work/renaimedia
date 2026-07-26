@@ -18,7 +18,7 @@ def _prompt_review(
     title: str,
     season: int | None,
     year: int | None,
-) -> dict[str, str | int] | None:
+) -> dict[str, str | int | None] | None:
     while True:
         print()
         print(f"  Source: {source_name}")
@@ -208,16 +208,20 @@ def _handle_result(
         year = result_override["year"]
 
     if media_type == "show" and isinstance(season, int):
+        target = config.output_folder / "TV Shows" / title / f"Season {season}"
         desc = f"{title} - Season {season}"
     elif media_type == "movie":
         year_info = f" ({year})" if isinstance(year, int) else ""
+        target = config.output_folder / "Movies" / f"{title}{year_info}"
         desc = f"{title}{year_info}"
     else:
+        target = config.output_folder / title
         desc = title
 
     print(
         f"  [{'DRY' if dry_run else 'MOVE'}] {desc} <- {len(media_files)} files from {source.name}"
     )
+    print(f"  -> {target}/")
 
     if not dry_run:
         organize(
